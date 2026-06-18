@@ -13,6 +13,9 @@ front/*.err.log
 
 knowledge_base/*.jsonl
 
+# 本地项目文件 不支持上传
+knowledge_docs/
+
 *.bin
 *.pt
 *.safetensors

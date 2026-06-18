@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse } from "../types";
+import { ChatRequest, ChatResponse, SourceSummary } from "../types";
 
 // API 基础 URL
 const API_BASE_URL = "http://localhost:8000";
@@ -26,11 +26,11 @@ export function formatTime(timestamp: number): string {
 export async function sendChatMessage(
   messages: { role: string; content: string }[],
   _onChunk?: (text: string) => void,
-): Promise<string> {
+): Promise<{ content: string; sources: SourceSummary[] }> {
   const request: ChatRequest = {
     messages: messages as ChatRequest["messages"],
     temperature: 0.7,
-    max_new_tokens: 1024,
+    max_new_tokens: 384,
     top_p: 0.9,
     stream: false,
   };
@@ -49,7 +49,10 @@ export async function sendChatMessage(
     }
 
     const data: ChatResponse = await response.json();
-    return data.choices[0].message.content;
+    return {
+      content: data.choices[0].message.content,
+      sources: data.choices[0].sources || [],
+    };
   } catch (error) {
     console.error("API 错误:", error);
     throw error;

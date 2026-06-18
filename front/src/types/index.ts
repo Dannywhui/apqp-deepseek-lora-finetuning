@@ -4,6 +4,15 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  sources?: SourceSummary[];
+}
+
+export interface SourceSummary {
+  source: string;
+  label: string;
+  pages?: number[];
+  chunks?: number[];
+  score?: number;
 }
 
 // 对话历史
@@ -40,6 +49,7 @@ export interface ChatResponse {
       role: string;
       content: string;
     };
+    sources?: SourceSummary[];
     finish_reason: string;
   }[];
   usage: {

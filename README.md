@@ -175,7 +175,7 @@ MIT License
 
 This project includes a minimal offline RAG pipeline for manually prepared enterprise knowledge files.
 
-1. Put cleaned `.txt`, `.md`, or `.json` files under `knowledge_docs/`.
+1. Put cleaned `.txt`, `.md`, `.json`, or text-based `.pdf` files under `knowledge_docs/`.
 2. Build the local JSONL vector store:
 
 ```bash
@@ -201,3 +201,5 @@ The JSONL record format is:
 ```
 
 The default embedding backend is a deterministic local hashing embedder, so it works without downloading an embedding model. It can be replaced later with a stronger local embedding model behind the same JSONL format.
+
+For PDF files, the offline builder uses PyMuPDF to extract the selectable text layer. Image-only or scanned PDF content still requires OCR and is not handled in this version.

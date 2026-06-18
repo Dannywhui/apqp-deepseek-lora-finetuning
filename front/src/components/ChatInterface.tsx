@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Moon, Sun, User, Menu, Trash2, Plus } from 'lucide-react';
-import { Message, Conversation } from '../types';
+import { Send, Loader2, Moon, Sun, User, Menu, Trash2, Plus, FileSearch } from 'lucide-react';
+import { Message, Conversation, SourceSummary } from '../types';
 import { sendChatMessage, generateId, generateTitle, saveConversations, loadConversations } from '../utils';
 import { useTheme } from '../hooks/useTheme';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -118,8 +118,9 @@ export default function ChatInterface() {
       const assistantMessage: Message = {
         id: generateId(),
         role: 'assistant',
-        content: response,
-        timestamp: Date.now()
+        content: response.content,
+        timestamp: Date.now(),
+        sources: response.sources
       };
 
       setConversations(prev => prev.map(c => {
@@ -313,11 +314,16 @@ export default function ChatInterface() {
                   `}>
                     <MarkdownRenderer content={message.content} />
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 px-1">
+                  <div className={`text-xs text-muted-foreground mt-1 px-1 flex items-center gap-2 ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}>
                     {new Date(message.timestamp).toLocaleTimeString('zh-CN', { 
                       hour: '2-digit', 
                       minute: '2-digit' 
                     })}
+                    {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
+                      <SourceTooltip sources={message.sources} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -379,6 +385,34 @@ export default function ChatInterface() {
           </p>
         </div>
       </main>
+    </div>
+  );
+}
+
+function SourceTooltip({ sources }: { sources: SourceSummary[] }) {
+  return (
+    <div className="relative group inline-flex">
+      <button
+        type="button"
+        aria-label="参考来源"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full 
+                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+      >
+        <FileSearch size={13} />
+      </button>
+      <div
+        className="pointer-events-none absolute left-0 bottom-6 z-30 hidden w-72 rounded-md border border-border 
+                 bg-popover p-3 text-left text-xs text-popover-foreground shadow-lg group-hover:block"
+      >
+        <div className="font-medium mb-2">参考来源</div>
+        <div className="space-y-1.5">
+          {sources.map((source, index) => (
+            <div key={`${source.source}-${index}`} className="leading-relaxed">
+              {index + 1}. {source.label || source.source}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

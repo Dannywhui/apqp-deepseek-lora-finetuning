@@ -16,8 +16,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 try:
     from back.rag import HashingEmbeddingModel, JsonlVectorStore, build_rag_prompt
+    from back.rag.sources import build_source_summaries
 except ImportError:
     from rag import HashingEmbeddingModel, JsonlVectorStore, build_rag_prompt
+    from rag.sources import build_source_summaries
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -30,9 +32,11 @@ VECTOR_STORE_PATH = os.getenv(
     "VECTOR_STORE_PATH",
     os.path.join(BASE_DIR, "..", "knowledge_base", "vector_store.jsonl"),
 )
-RAG_TOP_K = int(os.getenv("RAG_TOP_K", "4"))
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "2")) # 减少检索资料数量
 RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.05"))
+RAG_CONTEXT_MAX_CHARS = int(os.getenv("RAG_CONTEXT_MAX_CHARS", "1600"))
 EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+GENERATION_MAX_NEW_TOKENS = int(os.getenv("GENERATION_MAX_NEW_TOKENS", "384"))
 MODEL_PATH = os.path.join(BASE_DIR, "..", "output", "merge_model2")  # 模型路径
 QUANTIZATION = "8bit"  # 量化方式: "4bit", "8bit", 或 None (根据你的模型配置)
 
@@ -64,7 +68,7 @@ class ChatRequest(BaseModel):
     """聊天请求"""
     messages: List[Message] = Field(..., description="消息列表 (OpenAI 格式)")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="温度参数")
-    max_new_tokens: int = Field(default=512, ge=1, le=4096, description="最大生成长度")
+    max_new_tokens: int = Field(default=384, ge=1, le=4096, description="最大生成长度") # 减少生成长度
     top_p: float = Field(default=0.9, ge=0.0, le=1.0, description="Top-p 采样")
     stream: bool = Field(default=False, description="是否流式输出")
     model: Optional[str] = Field(default=None, description="模型名称 (可选)")
@@ -158,10 +162,10 @@ def load_rag_store():
         logger.info(f"RAG vector store not found or empty: {VECTOR_STORE_PATH}")
 
 
-def enrich_messages_with_rag(messages: List[Message]) -> List[Message]:
+def enrich_messages_with_rag(messages: List[Message]) -> tuple[List[Message], List[Dict[str, Any]]]:
     """Inject retrieved knowledge into the latest user message."""
     if not rag_store.records:
-        return messages
+        return messages, []
 
     latest_user_index = None
     latest_question = None
@@ -172,7 +176,7 @@ def enrich_messages_with_rag(messages: List[Message]) -> List[Message]:
             break
 
     if latest_user_index is None or not latest_question:
-        return messages
+        return messages, []
 
     query_embedding = embedding_model.embed(latest_question)
     results = rag_store.search(query_embedding, top_k=RAG_TOP_K, min_score=RAG_MIN_SCORE)
@@ -184,11 +188,14 @@ def enrich_messages_with_rag(messages: List[Message]) -> List[Message]:
         }
         for result in results
     ]
-    rag_content = build_rag_prompt(latest_question, contexts)
+    rag_content = build_rag_prompt(
+        latest_question,
+        contexts,
+        max_context_chars=RAG_CONTEXT_MAX_CHARS,
+    )
     enriched = list(messages)
     enriched[latest_user_index] = Message(role="user", content=rag_content)
-    return enriched
-
+    return enriched, build_source_summaries(contexts)
 
 def generate_response(
     prompt: str,
@@ -200,6 +207,8 @@ def generate_response(
     if model is None or tokenizer is None:
         raise RuntimeError("模型未加载")
     
+    max_new_tokens = min(max_new_tokens, GENERATION_MAX_NEW_TOKENS)
+
     # Tokenize
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
     inputs = {k: v.cuda() for k, v in inputs.items()}
@@ -231,6 +240,8 @@ async def generate_stream(
     if model is None or tokenizer is None:
         raise RuntimeError("模型未加载")
     
+    max_new_tokens = min(max_new_tokens, GENERATION_MAX_NEW_TOKENS)
+
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
     inputs = {k: v.cuda() for k, v in inputs.items()}
     
@@ -326,7 +337,8 @@ async def chat_completions(request: ChatRequest):
     
     try:
         # 构建 prompt
-        prompt = build_prompt(enrich_messages_with_rag(request.messages))
+        enriched_messages, sources = enrich_messages_with_rag(request.messages)
+        prompt = build_prompt(enriched_messages)
         
         if request.stream:
             # 流式输出
@@ -355,6 +367,7 @@ async def chat_completions(request: ChatRequest):
                     "role": "assistant",
                     "content": response_text
                 },
+                "sources": sources,
                 "finish_reason": "stop"
             }],
             usage={

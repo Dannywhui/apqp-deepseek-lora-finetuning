@@ -7,7 +7,7 @@ from .embeddings import HashingEmbeddingModel
 from .vector_store import chunk_text
 
 
-SUPPORTED_SUFFIXES = {".txt", ".md", ".json"}
+SUPPORTED_SUFFIXES = {".txt", ".md", ".json", ".pdf"}
 
 
 def build_vector_store(
@@ -48,10 +48,30 @@ def build_vector_store(
 
 
 def _read_document(path: Path) -> str:
+    if path.suffix.lower() == ".pdf":
+        return _read_pdf(path)
     if path.suffix.lower() == ".json":
         payload = json.loads(path.read_text(encoding="utf-8"))
         return "\n".join(_iter_json_text(payload))
     return path.read_text(encoding="utf-8")
+
+
+def _read_pdf(path: Path) -> str:
+    try:
+        import fitz
+    except ImportError as exc:
+        raise RuntimeError(
+            "PyMuPDF is required to read PDF files. Install dependencies with: "
+            "pip install -r back/requirements.txt"
+        ) from exc
+
+    pages = []
+    with fitz.open(path) as doc:
+        for page_number, page in enumerate(doc, start=1):
+            text = page.get_text("text", sort=True).strip()
+            if text:
+                pages.append(f"[Page {page_number}]\n{text}")
+    return "\n\n".join(pages)
 
 
 def _iter_json_text(value: Any) -> Iterable[str]:
