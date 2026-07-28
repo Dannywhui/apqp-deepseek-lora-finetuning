@@ -1,7 +1,7 @@
 import { ChatRequest, ChatResponse, SourceSummary } from "../types";
 
 // API 基础 URL
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "";
 
 // 生成唯一 ID
 export function generateId(): string {
@@ -25,10 +25,12 @@ export function formatTime(timestamp: number): string {
 // 发送聊天请求
 export async function sendChatMessage(
   messages: { role: string; content: string }[],
+  sessionId?: string,
   _onChunk?: (text: string) => void,
 ): Promise<{ content: string; sources: SourceSummary[] }> {
   const request: ChatRequest = {
     messages: messages as ChatRequest["messages"],
+    session_id: sessionId,
     temperature: 0.7,
     max_new_tokens: 384,
     top_p: 0.9,

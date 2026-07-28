@@ -1,10 +1,33 @@
-# FastAPI inference backend dependencies
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-pydantic>=2.5.0
-torch>=2.0.0
-transformers>=4.36.0
-accelerate>=0.25.0
-bitsandbytes>=0.41.0
-sentencepiece>=0.1.99
-PyMuPDF>=1.24.0
+# ===== requirements.txt（GPU 版，CUDA 11.8）=====
+# 基础 Web 框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+
+# 核心 AI 库（CUDA 11.8 版）
+# torch==2.0.1+cu118
+# torchvision==0.15.2+cu118
+# torchaudio==2.0.2+cu118
+transformers==4.36.0
+accelerate==0.25.0
+sentencepiece==0.1.99
+
+# QLoRA 微调需要的
+bitsandbytes==0.41.0
+peft==0.7.0
+trl==0.7.0
+
+# 工具类
+PyMuPDF==1.24.0
+PyPDF2==3.0.1          # 新增：解决 import PyPDF2 报错
+python-docx==1.2.0     # 新增：解决 import docx 报错
+python-pptx==1.0.2     # 新增：解决 import pptx 报错
+pandas==2.1.4          # 新增：解决 import pandas 报错
+python-dotenv==1.2.2   # 新增：解决 import dotenv 报错
+openpyxl==3.1.0
+mysql-connector-python==9.0.0
+
+# LangChain 全家桶（拆分独立包补充）
+langchain==0.1.0
+langgraph==0.0.20
+langchain-openai==0.0.6 # 新增：解决 langchain_openai 导入

@@ -32,6 +32,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   messages: ChatMessage[];
+  session_id?: string;
   temperature?: number;
   max_new_tokens?: number;
   top_p?: number;
@@ -57,4 +58,45 @@ export interface ChatResponse {
     completion_tokens: number;
     total_tokens: number;
   };
+}
+
+export interface ValidationSummary {
+  pfd_process_count: number;
+  pfd_characteristic_count: number;
+  fmea_failure_count: number;
+  fmea_process_count: number;
+  control_plan_control_count: number;
+}
+
+export interface ValidationPassedItem {
+  pfd_item?: string;
+  fmea_item?: string;
+  fmea_match?: string;
+  control_plan_match?: string;
+}
+
+export interface ValidationMissingItem {
+  pfd_item?: string;
+  fmea_item?: string;
+  reason: string;
+}
+
+export interface ValidationCheck {
+  category: string;
+  description: string;
+  passed: ValidationPassedItem[];
+  missing: ValidationMissingItem[];
+}
+
+export interface ValidationResult {
+  summary: ValidationSummary;
+  checks: ValidationCheck[];
+}
+
+export interface ValidateDocumentsResponse {
+  code: number;
+  message: string;
+  data: ValidationResult;
+  report: string;
+  warnings?: string[];
 }
