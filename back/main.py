@@ -99,7 +99,9 @@ ALLOWED_EXTENSIONS = {'.txt', '.md', '.csv', '.json', '.pdf', '.docx', '.xlsx', 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 MAX_QUESTION_LEN = 1000
 MODEL_PATH = os.path.join(BASE_DIR, "..", "output", "merge_model3")  # 合并后的完整模型路径
-QUANTIZATION = None  # 量化方式: "4bit", "8bit", 或 None (根据你的模型配置)
+# 量化方式: "4bit" / "8bit" / "none"（RTX 3060 12GB 推荐 4bit，可通过环境变量 QUANTIZATION 覆盖）
+_QUANT_ENV = os.getenv("QUANTIZATION", "4bit").strip().lower()
+QUANTIZATION = None if _QUANT_ENV in {"", "none", "null", "fp16"} else _QUANT_ENV
 
 # ==================== 全局变量 ====================
 app = FastAPI(title="AI Chat API", version="1.0.0")
@@ -271,54 +273,92 @@ def load_model():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    # ===== 修改：加载模型时忽略不匹配的权重 =====
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_PATH,
-        trust_remote_code=True,
-        torch_dtype=torch.float16,
-        device_map=None,
-        low_cpu_mem_usage=True,
-        ignore_mismatched_sizes=True,  # 忽略不匹配
-    )
-    
-    if torch.cuda.is_available():
-        model = model.cuda()
-        logger.info("模型已加载到 GPU")
+    # ===== 加载模型（支持 4bit/8bit 量化，适配 RTX 3060 12GB）=====
+    load_kwargs = {
+        "pretrained_model_name_or_path": MODEL_PATH,
+        "trust_remote_code": True,
+        "low_cpu_mem_usage": True,
+        "ignore_mismatched_sizes": True,
+    }
+
+    use_cuda = torch.cuda.is_available()
+    quant = QUANTIZATION if use_cuda else None
+
+    if quant == "4bit":
+        logger.info("使用 4bit 量化加载（bitsandbytes）")
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+        # 必须用 "auto"：单卡 {"": 0} 会触发 accelerate 对量化模型调用 .to() 报错
+        load_kwargs["device_map"] = "auto"
+    elif quant == "8bit":
+        logger.info("使用 8bit 量化加载（bitsandbytes）")
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+        load_kwargs["device_map"] = "auto"
     else:
-        logger.info("模型已加载到 CPU")
-    
+        if quant and quant not in {"4bit", "8bit"}:
+            logger.warning(f"未知 QUANTIZATION={quant!r}，回退为 fp16")
+        logger.info("使用 fp16 全精度加载（未量化）")
+        load_kwargs["torch_dtype"] = torch.float16
+        load_kwargs["device_map"] = None
+
+    model = AutoModelForCausalLM.from_pretrained(**load_kwargs)
+
+    if load_kwargs.get("device_map") is None:
+        if use_cuda:
+            model = model.cuda()
+            logger.info("模型已加载到 GPU (fp16)")
+        else:
+            logger.info("模型已加载到 CPU")
+    else:
+        logger.info(f"模型已量化加载到 GPU ({quant})")
+
     # 设置 pad_token_id
     if model.config.pad_token_id is None:
         model.config.pad_token_id = tokenizer.eos_token_id
-    
-    if hasattr(model, 'generation_config'):
+
+    if hasattr(model, "generation_config"):
         model.generation_config.pad_token_id = tokenizer.eos_token_id
-    
+
+    if use_cuda:
+        allocated = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        logger.info(f"GPU 显存: allocated={allocated:.2f}GB, reserved={reserved:.2f}GB")
+
     logger.info("模型加载完成!")
+
+
+DEFAULT_SYSTEM_PROMPT = """你是企业内部 APQP 与项目质量管理助手。
+
+【输出格式】按场景选用以下结构之一，并严格输出：
+分析类问题：
+【主题】… 【结论】… 【要点】… 【风险】… 【建议】…
+项目查询类：
+【结论】… 【项目情况】… 【关注点】… 【建议】…
+
+【内容质量】先结论后细节；引用具体编号/责任人/日期/指标；建议可执行；禁止空话套话；关键词用 **加粗**；不要输出 JSON/字段名/免责声明；控制在 400 字以内。"""
 
 
 def build_prompt(messages: List[Message]) -> str:
     """构建对话 prompt"""
     prompt = ""
-    
-    # ✅ 定义格式要求常量
-    FORMAT_REQUIREMENT = "【格式要求】回答中如需强调关键词，请使用 **关键词** 包裹。"
-    
     has_system = any(msg.role == "system" for msg in messages)
-    
+
     if not has_system:
-        # 没有 system 消息时，创建一个包含格式要求的 system 消息
-        prompt += f"System: {FORMAT_REQUIREMENT}\n\n"
-    
+        prompt += f"System: {DEFAULT_SYSTEM_PROMPT}\n\n"
+
     for msg in messages:
         if msg.role == "system":
-            # ✅ 在现有 system 消息中简洁地追加格式要求
-            prompt += f"System: {msg.content}\n\n{FORMAT_REQUIREMENT}\n\n"
+            # 已有完整业务 prompt 时不再重复追加，避免指令互相覆盖
+            prompt += f"System: {msg.content}\n\n"
         elif msg.role == "user":
             prompt += f"User: {msg.content}\n\n"
         elif msg.role == "assistant":
             prompt += f"Assistant: {msg.content}\n\n"
-    
+
     prompt += "Assistant: "
     return prompt
 
@@ -415,15 +455,19 @@ def rewrite_query(history: List[Message], current_query: str) -> str:
     # 只取最近几轮历史
     recent_history = history[-6:]
     
-    # 拼接重写 prompt
-    rewrite_prompt = f"""根据对话历史，将用户当前问题改写为独立完整的问句。
+    rewrite_prompt = f"""你是查询改写助手。根据对话历史，把用户当前问题改写成独立、完整、可直接检索的问句。
+
+要求：
+1. 补全指代（如「这个项目」「它」「刚才那个」）为具体对象/编号
+2. 保留原问题意图，不要新增用户没问的内容
+3. 只输出改写后的问句，不要解释、不要引号
 
 历史对话：
 {format_history_for_rewrite(recent_history)}
 
 用户当前问题：{current_query}
 
-改写后的问题（直接输出，不要解释）："""
+改写后的问题："""
     
     try:
         # ✅ 使用线程池执行，避免阻塞事件循环
@@ -1023,7 +1067,13 @@ async def chat_completions(request: ChatRequest, background_tasks: BackgroundTas
 @app.post("/chat/start_file_session")
 async def start_file_session(
     file: UploadFile = File(...),
-    system_prompt: str = Form(default="你是数据分析助手，请基于用户上传的文件内容回答问题。"),
+    system_prompt: str = Form(default=(
+        "你是APQP项目质量管理助手，请仅基于用户上传的文件内容回答。\n"
+        "【输出格式】\n"
+        "【主题】…\n【结论】…\n【要点】…\n【风险】…\n【建议】…\n"
+        "【内容质量】先结论后细节；引用文件中的具体事实/指标；建议可执行；"
+        "关键词用 **加粗**；不要编造文件中没有的内容；控制在 400 字以内。"
+    )),
     session_id: str = Form(default=None)
 ):
     """
@@ -1280,26 +1330,31 @@ def build_scoring_prompts(file_content: str, params: QuestionParams) -> Dict[str
         "summary200": None,
         "score": None
     }
-    
-    # ✅ 使用更简单、更明确的标记方式
-    FORMAT_REQUIREMENT = """【格式要求 - 必须严格遵守】
-1. 所有关键术语、数字、维度名称前后必须添加【】符号
-2. 示例：文档分析了【AI】与【机器学习】的融合趋势，预计到【2032年】市场规模达【95亿美元】
-3. 评分输出中，维度名和分数必须用【】包裹，如：【数据支撑】【25分】"""
+
+    HIGHLIGHT_RULE = """【高亮格式 - 必须严格遵守】
+1. 关键术语、专有名词、关键数字用【】包裹，便于前端高亮
+2. 示例：文档围绕【APQP】第三阶段展开，涉及【PFMEA】与【控制计划】，目标【Cpk≥1.33】
+3. 不要整句都加【】，只标记真正关键的词和数字"""
 
     if params.needSummary100 or params.needSummary200:
-        summary_system = f"System: 你是专业的文档摘要助手。输出时，关键术语和数字必须用【】包裹。\n\n{FORMAT_REQUIREMENT}\n\n"
-        
+        summary_system = (
+            "System: 你是专业的质量管理文档摘要助手。"
+            "摘要要抓住主题、关键结论、关键指标/风险，禁止空泛复述。"
+            f"\n\n{HIGHLIGHT_RULE}\n\n"
+        )
+
         if params.needSummary100:
-            prompts["summary100"] = f"""{summary_system}User: 请为以下文档生成100字以内的摘要，关键术语用【】包裹。
+            prompts["summary100"] = f"""{summary_system}User: 请为以下文档生成不超过100字的摘要。
+要求：一句话点明主题 + 1-2个关键结论/指标；关键术语和数字用【】包裹。
 
 【文档内容】
 {file_content}
 
 Assistant:"""
-        
+
         if params.needSummary200:
-            prompts["summary200"] = f"""{summary_system}User: 请为以下文档生成200字以内的摘要，关键术语用【】包裹。
+            prompts["summary200"] = f"""{summary_system}User: 请为以下文档生成不超过200字的摘要。
+要求：先写主题与结论，再补充关键指标、风险或建议；关键术语和数字用【】包裹。
 
 【文档内容】
 {file_content}
@@ -1307,24 +1362,31 @@ Assistant:"""
 Assistant:"""
 
     if params.needScore:
-        score_system = f"System: 你是严谨客观的评审专家。评分输出中，维度名和分数必须用【】包裹。\n\n{FORMAT_REQUIREMENT}\n\n"
-        
-        rules = params.rules if params.rules else "请从内容完整性、逻辑清晰度、技术准确性等维度进行综合评分"
-        
+        score_system = (
+            "System: 你是严谨客观的评审专家。"
+            "评分必须有依据，理由要具体指出文档优点或缺口，禁止套话。"
+            f"\n\n{HIGHLIGHT_RULE}\n\n"
+        )
+
+        rules = params.rules if params.rules else (
+            "请从【内容完整性】【逻辑清晰度】【技术准确性】三个维度评分，每项满分100，再给出总分。"
+        )
+
         prompts["score"] = f"""{score_system}User: 请根据以下要求对文档评分：
 {rules}
 
 【文档内容】
 {file_content}
 
-请严格按以下格式输出评分（维度名和分数必须用【】包裹）：
+请严格按以下格式输出（维度名和分数必须用【】包裹）：
 【维度名称】【X分】
-理由：一句话说明
+理由：一句话说明依据（指出文档中的具体点）
 
 【总分】【XX分】
+【一句话总评】概括优缺点
 
 Assistant:"""
-        
+
     return prompts
 
 def convert_bold_to_red(text: str) -> str:

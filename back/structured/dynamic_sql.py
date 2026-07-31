@@ -105,7 +105,13 @@ def extract_sql_from_response(response: str) -> str:
 
 def build_sql_generation_prompt(question: str, schemas: List[Dict[str, Any]]) -> str:
     schema_text = format_schema_for_prompt(schemas)
-    return f"""根据表结构和用户问题生成SQL。必须提取用户问题中的具体值（如项目ID、名称）放到SQL里。
+    return f"""你是 SQL 生成助手。根据表结构和用户问题生成一条只读 SELECT 语句。
+
+硬性要求：
+1. 必须把用户问题中的具体值（项目ID、名称等）写入 WHERE 条件
+2. 只输出一条 SQL，不要解释、不要 Markdown 代码块
+3. 禁止 INSERT/UPDATE/DELETE/DROP 等写操作
+4. 表名、字段名必须来自下方表结构
 
 表结构:
 {schema_text}

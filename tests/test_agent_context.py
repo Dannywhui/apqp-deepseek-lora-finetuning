@@ -59,17 +59,21 @@ class AgentContextTests(unittest.TestCase):
         self.assertEqual(len(context.rag_contexts), 1)
 
     def test_build_agent_prompt_includes_tool_and_rag_context(self):
-        summary_tool = FakeTool({"status": [{"project_id": "APQP-2026-001", "current_status": "Delayed"}]})
-        context = build_agent_context(
-            "APQP-2026-001 为什么延期，APQP 阶段评审要求是什么？",
-            tools={"apqp_project_summary": summary_tool},
-            rag_retriever=lambda question: [{"text": "阶段评审需要确认风险和交付物。", "metadata": {"source": "manual.md"}}],
+        context = AgentContext(
+            route=AgentRoute("hybrid", "apqp_project_summary", "PROJ2026001"),
+            tool_result={"status": [{"project_id": "PROJ2026001", "current_status": "Delayed"}]},
+            rag_contexts=[
+                {
+                    "text": "阶段评审需要确认风险和交付物。",
+                    "metadata": {"source": "manual.md"},
+                }
+            ],
         )
 
-        prompt = build_agent_prompt("APQP-2026-001 为什么延期，APQP 阶段评审要求是什么？", context)
+        prompt = build_agent_prompt("PROJ2026001 为什么延期，APQP 阶段评审要求是什么？", context)
 
         self.assertIn("【项目事实】", prompt)
-        self.assertIn("APQP-2026-001", prompt)
+        self.assertIn("PROJ2026001", prompt)
         self.assertIn("【流程依据】", prompt)
         self.assertIn("阶段评审需要确认风险和交付物。", prompt)
         self.assertIn("请仅基于以上资料回答", prompt)
@@ -188,7 +192,7 @@ class AgentContextTests(unittest.TestCase):
         self.assertIn("偏光片供应商验证周期过长", prompt)
         self.assertIn("APQP 风险评审应形成可执行的预防措施", prompt)
 
-    def test_build_agent_prompt_guides_natural_professional_answer_style(self):
+    def test_build_agent_prompt_guides_structured_professional_answer_style(self):
         context = AgentContext(
             route=AgentRoute("project_summary", "apqp_project_summary", "APQP-2026-001"),
             tool_result={"status": [{"project_id": "APQP-2026-001", "current_status": "进行中"}]},
@@ -196,15 +200,15 @@ class AgentContextTests(unittest.TestCase):
 
         prompt = build_agent_prompt("APQP-2026-001 当前进度怎么样？", context)
 
-        self.assertIn("【回答风格】", prompt)
-        self.assertIn("自然、专业、简洁", prompt)
-        self.assertIn("不要机械套用固定标题", prompt)
-        self.assertIn("优先说清结论、依据和下一步建议", prompt)
-        self.assertIn("不要逐表复述数据来源", prompt)
-        self.assertIn("不要连续使用“根据…表”", prompt)
-        self.assertIn("先综合判断项目状态", prompt)
-        self.assertIn("合并说明关键关注点", prompt)
-        self.assertIn("资料不足时只说明缺少的业务信息", prompt)
+        self.assertIn("【输出格式", prompt)
+        self.assertIn("【结论】", prompt)
+        self.assertIn("【项目情况】", prompt)
+        self.assertIn("【关注点】", prompt)
+        self.assertIn("【建议】", prompt)
+        self.assertIn("【内容质量要求】", prompt)
+        self.assertIn("先结论后细节", prompt)
+        self.assertIn("建议必须可执行", prompt)
+        self.assertIn("不要逐表复述「根据…表」", prompt)
         self.assertIn("不要追加 AI 免责声明", prompt)
 
 

@@ -13,6 +13,7 @@
 ### 核心功能
 
 * ✅ **大模型领域微调** - 基于 LoRA 的 APQP 领域知识适配
+* ✅ **4bit 量化推理** - 默认 `QUANTIZATION=4bit`，适配 RTX 3060 12GB 显存本地部署
 * ✅ **RAG 检索增强** - SQLite 向量库 + bge-small-zh-v1.5 语义嵌入，支持企业知识文档检索
 * ✅ **动态 SQL 查询** - 支持自然语言查询数据库（规则引擎 + 大模型双模式）
 * ✅ **规则引擎** - 快速可靠的 SQL 生成与自然语言回复，毫秒级响应
@@ -21,7 +22,7 @@
 * ✅ **文件评分+摘要** - 一键生成 100/200 字摘要与质量评分
 * ✅ **知识库同步** - 自动管理文档生命周期（新增/修改/删除）
 * ✅ **8D 文档精确检索** - 支持 8D+6~12 位编号精确匹配
-* ✅ **结构化输出** - 专业的分析 + 风险 + 建议格式
+* ✅ **结构化 Prompt 输出** - 按场景统一【结论/要点/风险/建议】等格式，强调可执行建议
 * ✅ **Web 交互界面** - 基于 React + Vite + TailwindCSS 的现代化聊天界面
 * ✅ **API 服务** - OpenAI 兼容的 `/chat/completions` 接口
 
@@ -409,7 +410,37 @@ FMEA和控制计划有什么关系？
 
 ---
 
-## 🤖 Model Fine-Tuning
+## 🤖 Model Fine-Tuning & Inference
+
+### 推理量化（RTX 3060 12GB）
+
+后端默认使用 **4bit 量化**加载合并后的本地模型，适配 RTX 3060 等 12GB 显卡：
+
+```bash
+# 环境变量（推荐）
+QUANTIZATION=4bit   # 可选: 4bit / 8bit / none(fp16)
+```
+
+对应 `back/main.py` 加载逻辑：
+
+```python
+# QUANTIZATION=4bit（默认）
+BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+)
+device_map = "auto"
+```
+
+| 模式 | 适用场景 | 显存占用（约） |
+|------|----------|----------------|
+| `4bit` | RTX 3060 12GB（推荐） | ~5–7GB |
+| `8bit` | 显存更充裕时 | 更高 |
+| `none` / `fp16` | 大显存卡全精度 | 最高 |
+
+无 CUDA 时会自动回退 CPU（不量化）。
 
 ### 训练配置
 
@@ -435,16 +466,47 @@ python train.py
 python merge_model.py
 ```
 
-### 训练数据格式
+### 训练数据与统一回答格式
 
-企业级结构化输出格式：
+微调数据沿用企业级结构化输出；线上 Prompt 已按场景规范重写，与之对齐并强化内容质量：
+
+**知识问答 / 文件分析：**
 
 ```text
 【主题】
-【问题分析】
+【结论】
+【要点】
 【风险】
-【改进建议】
+【建议】
 ```
+
+**项目结构化查询：**
+
+```text
+【结论】
+【项目情况】
+【关注点】
+【建议】
+```
+
+**混合问答（项目事实 + 流程依据）：**
+
+```text
+【结论】
+【项目事实】
+【流程依据】
+【建议】
+```
+
+内容质量要求：先结论后细节；引用编号/责任人/日期/指标；建议可执行；禁止空话套话；控制在约 400 字以内。
+
+相关实现：
+
+* `back/agent/context.py` — Agent 按路由生成格式化 Prompt
+* `back/rag/prompting.py` — RAG Prompt
+* `back/main.py` — 默认 system、评分/摘要、文件会话、查询改写
+* `back/structured/reply_rules.py` — 规则引擎自然语言回复
+* `back/structured/apqp_summary_pipeline.py` — 结项报告分层摘要
 
 ---
 
@@ -516,7 +578,9 @@ Content-Type: application/json
 * **SQL 安全**：SQL 查询使用表名和字段名白名单 + 参数化查询，防止注入
 * **内部 SQL 生成**：使用独立 `session_id`（`_internal_sql_gen`），跳过对话历史保存
 * **嵌入维度动态**：SQLite 向量存储的 embedding 维度随嵌入模型自适应
-* **Prompt 结构顺序**：规则 → 回答风格 → 【知识库资料】 → 回答指令 → 【用户问题】
+* **4bit 默认量化**：`QUANTIZATION=4bit`，适配 RTX 3060 12GB 本地推理
+* **Prompt 结构顺序**：规则 → 输出格式/内容质量 → 【知识库资料/项目数据】 → 回答指令 → 【用户问题】
+* **统一输出格式**：知识问答用【主题/结论/要点/风险/建议】；项目查询用【结论/项目情况/关注点/建议】
 
 ---
 

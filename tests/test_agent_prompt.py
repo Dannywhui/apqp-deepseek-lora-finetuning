@@ -25,12 +25,12 @@ for i, line in enumerate(lines, 1):
 
 # 验证顺序：知识库资料应该在 "请基于资料回答" 之前
 rag_idx = prompt.find("【知识库资料】")
-answer_idx = prompt.find("请基于以上提供的资料回答")
+answer_idx = prompt.find("请仅基于以上资料回答")
 question_idx = prompt.find("【用户问题】")
 
 print("\n" + "=" * 60)
 print(f"【知识库资料】位置: {rag_idx}")
-print(f"'请基于以上提供的资料回答'位置: {answer_idx}")
+print(f"'请仅基于以上资料回答'位置: {answer_idx}")
 print(f"【用户问题】位置: {question_idx}")
 
 if rag_idx < answer_idx < question_idx:

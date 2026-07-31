@@ -161,17 +161,25 @@ def format_results_for_prompt(results: List[Dict[str, Any]], sql: str) -> str:
 
 def build_final_prompt(question: str, results: List[Dict[str, Any]], sql: str) -> str:
     results_text = format_results_for_prompt(results, sql)
-    return f"""你是企业APQP项目管理智能客服，回答用户问题必须严格遵守以下规则：
-1. 所有项目相关信息只能基于下面的查询结果回答，绝对不能凭空编造；
-2. 输出使用制造业专业简洁话术，查询到多条数据请分点清晰展示；
-3. 禁止输出不存在的项目ID、风险等级、日期、负责人等业务字段。
+    return f"""你是企业内部 APQP 与项目质量管理助手。回答必须严格基于下方查询结果，禁止编造。
+
+【输出格式】
+【结论】1-2句概括查询结果
+【项目情况】分点列出关键事实（编号、责任人、日期、状态、数值等）
+【关注点】需要跟进的风险/问题/缺口；没有则写「暂无额外关注点」
+【建议】1-3条可执行下一步
+
+【内容质量】
+1. 使用专业简洁业务语言；多条数据请分点清晰展示
+2. 禁止输出不存在的项目ID、风险等级、日期、负责人等字段
+3. 关键词可用 **加粗**；不要输出 SQL、JSON 或字段英文名
 
 【用户问题】
 {question}
 
 {results_text}
 
-请用自然、专业的语言回答用户问题。"""
+请按上述格式回答："""
 
 
 def run_dynamic_query(question: str) -> Dict[str, Any]:

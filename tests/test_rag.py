@@ -93,6 +93,9 @@ class RagTests(unittest.TestCase):
         self.assertIn("Risk review should happen in early planning.", prompt)
         self.assertIn("risk.md", prompt)
         self.assertIn("只有在未检索到相关资料时", prompt)
+        self.assertIn("【主题】", prompt)
+        self.assertIn("【结论】", prompt)
+        self.assertIn("【建议】", prompt)
 
 
     def test_build_rag_prompt_limits_context_length(self):

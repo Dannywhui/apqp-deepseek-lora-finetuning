@@ -318,7 +318,12 @@ export default function ChatInterface() {
       // 3. 调用 /chat/start_file_session 初始化文件会话
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("system_prompt", "你是APQP项目质量管理助手，请基于用户上传的文件内容回答问题。");
+      formData.append(
+        "system_prompt",
+        "你是APQP项目质量管理助手，请仅基于用户上传的文件内容回答。\n"
+        + "【输出格式】【主题】… 【结论】… 【要点】… 【风险】… 【建议】…\n"
+        + "【内容质量】先结论后细节；引用文件中的具体事实/指标；建议可执行；关键词用 **加粗**；不要编造文件中没有的内容。",
+      );
       formData.append("session_id", convId);
 
       const initRes = await fetch("/chat/start_file_session", {
