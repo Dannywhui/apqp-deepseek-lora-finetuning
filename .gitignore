@@ -1,21 +1,62 @@
+# --- Python / local env ---
 output/
 venv/
+.venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
 
+# Secrets — never commit
+.env
+**/.env
+!.env.example
+
+# Base model weights (large / local-only)
 deepseek_model/
+models/**/*.bin
+models/**/*.pt
+models/**/*.safetensors
+models/**/*.onnx
+*.bin
+*.pt
+*.safetensors
 
+# Frontend build
 front/node_modules/
 front/dist/
 front/*.log
 front/*.out.log
 front/*.err.log
 
-knowledge_base/*.jsonl
-
-# 本地项目文件 不支持上传
+# --- Enterprise / runtime data (do not publish) ---
+# Knowledge source docs & vector DB
 knowledge_docs/
+knowledge_base/*.jsonl
+knowledge_base/*.sqlite
+knowledge_base/*.db
+!knowledge_base/.gitkeep
 
-*.bin
-*.pt
-*.safetensors
+# Chat / session history
+chat_history/
+!chat_history/.gitkeep
+
+# Uploaded business files & internal requirement docs
+back/uploads/
+!back/uploads/.gitkeep
+
+# Local test fixtures that may contain internal docs
+test_files/
+!test_files/.gitkeep
+
+# Spreadsheets / office docs (often contain real project data)
+*.xlsx
+*.xls
+*.xlsm
+*.docx
+*.pptx
+*.pdf
+
+# VS Code local (optional)
+.vscode/

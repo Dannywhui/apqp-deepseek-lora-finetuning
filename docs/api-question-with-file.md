@@ -1,7 +1,7 @@
 # APQP 标准 AI 评分接口
 
 **接口地址**  
-`POST http://192.168.0.100:8000/api/v1/question_with_file`
+`POST http://<AI_SERVICE_HOST>:8000/api/v1/question_with_file`
 
 **功能说明**  
 上传文件，AI 根据用户指定的评分要求对文件内容进行自动评审打分。支持两种调用模式：
@@ -18,13 +18,12 @@
 
 ---
 
-
 ## 调用示例
 
 ### cURL - 同步模式
 
 ```bash
-curl -X POST "http://192.168.0.100:8000/api/v1/question_with_file" \
+curl -X POST "http://<AI_SERVICE_HOST>:8000/api/v1/question_with_file" \
   -F "file=@/path/to/document.pdf" \
   -F "question=请从内容完整性、格式规范性、逻辑清晰度三个维度打分，每项满分100分"
 ```
@@ -44,7 +43,7 @@ curl -X POST "http://192.168.0.100:8000/api/v1/question_with_file" \
 ### cURL - 异步模式
 
 ```bash
-curl -X POST "http://192.168.0.100:8000/api/v1/question_with_file" \
+curl -X POST "http://<AI_SERVICE_HOST>:8000/api/v1/question_with_file" \
   -F "file=@report.docx" \
   -F "question=评估报告的专业性和数据准确性，各50分" \
   -F "callback_url=https://your-server.com/callback"
