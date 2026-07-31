@@ -2,39 +2,20 @@
 
 ## 📌 Project Overview
 
-本项目基于 **DeepSeek-LLM-7B-Chat** 大模型，通过 **LoRA (Low-Rank Adaptation)** 微调技术，构建面向 **APQP (Advanced Product Quality Planning)** 领域的智能质量管理助手系统。
+面向 **APQP** 场景的本地智能助手 Demo：基于 **DeepSeek-LLM-7B-Chat + LoRA** 微调，配合 RAG、自然语言查库、跨文档校验与文件对话，提供可本地复现的前后端分离示例。
 
-系统采用前后端分离架构，整合了大模型微调、RAG 检索增强（语义向量）、动态 SQL 查询、跨文档链路校验、文件解析对话等多种能力，为企业 APQP 项目管理提供智能化支持。
+> **开源说明**：本仓库已擦除企业内部敏感数据（真实业务库、对话历史、向量库、上传文档、凭证与内网地址等），公开内容仅为**技术复现 Demo**，不包含生产环境数据，也不能直接当作企业正式系统使用。
 
 ---
 
 ## 🧠 Key Features
 
-### 核心功能
-
-* ✅ **大模型领域微调** - 基于 LoRA 的 APQP 领域知识适配
-* ✅ **4bit 量化推理** - 默认 `QUANTIZATION=4bit`，适配 RTX 3060 12GB 显存本地部署
-* ✅ **RAG 检索增强** - SQLite 向量库 + bge-small-zh-v1.5 语义嵌入，支持企业知识文档检索
-* ✅ **动态 SQL 查询** - 支持自然语言查询数据库（规则引擎 + 大模型双模式）
-* ✅ **规则引擎** - 快速可靠的 SQL 生成与自然语言回复，毫秒级响应
-* ✅ **跨文档链路校验** - 流程图(PFD) + FMEA + 控制计划 三位一体文本匹配校验
-* ✅ **文件上传对话** - 上传任意文档后进行多轮 Q&A 解析
-* ✅ **文件评分+摘要** - 一键生成 100/200 字摘要与质量评分
-* ✅ **知识库同步** - 自动管理文档生命周期（新增/修改/删除）
-* ✅ **8D 文档精确检索** - 支持 8D+6~12 位编号精确匹配
-* ✅ **结构化 Prompt 输出** - 按场景统一【结论/要点/风险/建议】等格式，强调可执行建议
-* ✅ **Web 交互界面** - 基于 React + Vite + TailwindCSS 的现代化聊天界面
-* ✅ **API 服务** - OpenAI 兼容的 `/chat/completions` 接口
-
-### 支持的查询类型
-
-* 📊 项目进度/状态查询
-* ⚠️ 项目风险查询
-* 🐛 项目问题查询
-* 📋 项目交付物查询
-* 📚 APQP 流程/阶段/方法论知识问答
-* 📄 上传文件内容解析与对话
-* 🔍 跨文档链路校验（PFD ↔ FMEA ↔ 控制计划）
+* LoRA 领域微调 + 4bit 量化本地推理
+* RAG 知识问答（SQLite 向量库 + bge-small-zh）
+* 自然语言查询项目进度 / 风险 / 问题 / 交付物（规则引擎为主）
+* 跨文档浅层校验（PFD ↔ FMEA ↔ 控制计划）
+* 文件上传多轮对话、评分与摘要
+* React 聊天界面 + OpenAI 兼容 API
 
 ---
 
@@ -163,15 +144,15 @@ pip install -r requirements.txt
 
 ### 2. 配置环境变量
 
-复制 `back/structured/.env` 文件并配置：
+复制仓库根目录的 `.env.example` 为 `back/structured/.env`，再填写本地配置（`.env` 已加入 `.gitignore`，请勿提交）：
 
 ```env
 # 数据库配置
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_USER=root
-MYSQL_PASSWORD=your_password
-MYSQL_DATABASE=apqp_db
+MYSQL_PASSWORD=
+MYSQL_DATABASE=apqp
 
 # 模型配置
 OPENAI_BASE_URL=http://127.0.0.1:8000/v1
